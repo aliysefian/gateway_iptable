@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="{{ polling_interval }}">
+  <title>iptfw dashboard</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>iptfw</h1>
+      <span>127.0.0.1-only iptables forwarding manager</span>
+    </div>
+    <form method="post" action="/logout"><button class="secondary" type="submit">Sign out</button></form>
+  </header>
+
+  <main>
+    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+    <section class="overview">
+      <div class="metric-card">
+        <span>Managed</span>
+        <strong>{{ metrics.managed_count }}</strong>
+        <small>{{ metrics.unmanaged_count }} unmanaged detected</small>
+      </div>
+      <div class="metric-card">
+        <span>NAT / DNAT</span>
+        <strong>{{ metrics.nat_count }} / {{ metrics.dnat_count }}</strong>
+        <small>forwarding and translation rules</small>
+      </div>
+      <div class="metric-card">
+        <span>Filter</span>
+        <strong>{{ metrics.filter_count }}</strong>
+        <small>{{ metrics.blocked_count }} drop/reject rules</small>
+      </div>
+      <div class="metric-card">
+        <span>Traffic</span>
+        <strong>{{ metrics.total_bandwidth }}</strong>
+        <small>{{ metrics.total_packets }} packets counted</small>
+      </div>
+    </section>
+
+    <section class="visual-grid">
+      <div class="visual-panel">
+        <div class="section-head">
+          <h2>Forwarding map</h2>
+          <span class="muted">managed rules</span>
+        </div>
+        <div class="flow-map">
+          {% for rule in flow_rules %}
+          <div class="flow-row">
+            <div class="node source">
+              <span>{{ rule.source }}</span>
+              <strong>WAN</strong>
+            </div>
+            <div class="link">
+              <span>{{ rule.protocol }} {{ rule.external }}</span>
+            </div>
+            <div class="node gateway">
+              <span>gateway</span>
+              <strong>DNAT</strong>
+            </div>
+            <div class="link">
+              <span>{{ rule.protocol }}</span>
+            </div>
+            <div class="node lan">
+              <span>{{ rule.name }}</span>
+              <strong>{{ rule.internal }}</strong>
+            </div>
+          </div>
+          {% else %}
+          <div class="empty-visual">No managed forwarding rules yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="visual-panel">
+        <div class="section-head">
+          <h2>Traffic chart</h2>
+          <span class="muted">estimated from counters</span>
+        </div>
+        <div class="bar-chart">
+          {% for row in top_traffic %}
+          <div class="bar-row">
+            <div class="bar-label">
+              <strong>{{ row.label }}</strong>
+              <span>{{ row.type }} · {{ "managed" if row.managed else "unmanaged" }}</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width: {{ row.width }}%"></div></div>
+            <div class="bar-value">{{ row.rate }}</div>
+          </div>
+          {% else %}
+          <div class="empty-visual">No iptables counters available yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>Add forwarding rule</h2>
+      <form class="grid-form" method="post" action="/rules">
+        <label>Name
+          <input name="name" maxlength="80" placeholder="ssh to build host">
+        </label>
+        <label>Protocol
+          <select name="protocol" required>
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+          </select>
+        </label>
+        <label>External port
+          <input name="external_port" inputmode="numeric" required placeholder="2222">
+        </label>
+        <label>Internal IP
+          <input name="internal_ip" required placeholder="192.168.1.20">
+        </label>
+        <label>Internal port
+          <input name="internal_port" inputmode="numeric" required placeholder="22">
+        </label>
+        <label>Source allowlist
+          <input name="source_cidr" placeholder="203.0.113.10/32">
+        </label>
+        <button type="submit">Create rule</button>
+      </form>
+    </section>
+
+    <section class="band">
+      <h2>Managed rules</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Protocol</th><th>External</th><th>Destination</th><th>Source</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for rule in managed_rules %}
+            <tr>
+              <td>{{ rule.id }}</td><td>{{ rule.name or "" }}</td><td>{{ rule.protocol }}</td>
+              <td>{{ rule.external_port }}</td><td>{{ rule.internal_ip }}:{{ rule.internal_port }}</td>
+              <td>{{ rule.source_cidr or "any" }}</td><td>{{ "enabled" if rule.enabled else "disabled" }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="muted">No managed rules yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>NAT rules</h2>
+      {% include "rules_table.html" with context %}
+    </section>
+
+    <section class="band">
+      <h2>Filter rules</h2>
+      {% set nat_rules = filter_rules %}
+      {% include "rules_table.html" with context %}
+    </section>
+
+    <section class="band">
+      <div class="section-head">
+        <h2>Backups</h2>
+        <form method="post" action="/backups"><button class="secondary" type="submit">Create backup</button></form>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Created</th><th>Reason</th><th>Size</th><th>SHA-256</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for b in backups %}
+            <tr>
+              <td>{{ b.id }}</td><td>{{ b.created_at }}</td><td>{{ b.reason }}</td><td>{{ b.size_bytes }}</td>
+              <td class="mono">{{ b.sha256[:16] }}</td>
+              <td class="actions">
+                <a href="/backups/{{ b.id }}">View</a>
+                <form method="post" action="/backups/{{ b.id }}/restore"><button class="danger" type="submit">Restore</button></form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">No backups recorded.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>Audit log</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Result</th><th>Details</th></tr></thead>
+          <tbody>
+          {% for row in audit %}
+            <tr>
+              <td>{{ row.created_at }}</td><td>{{ row.action }}</td><td>{{ row.actor }}</td>
+              <td>{{ "ok" if row.success else "failed" }}</td><td class="mono">{{ row.details }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="muted">No audit events yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

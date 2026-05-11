@@ -1,0 +1,28 @@
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Managed</th><th>Table</th><th>Chain</th><th>Type</th><th>Proto</th>
+        <th>Source</th><th>Destination</th><th>Ports</th><th>Forward target</th>
+        <th>Packets</th><th>Bytes</th><th>Bandwidth</th><th>Raw</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in nat_rules %}
+      <tr>
+        <td><span class="pill {{ 'ok' if r.managed else 'warn' }}">{{ "managed" if r.managed else "unmanaged" }}</span></td>
+        <td>{{ r.table }}</td><td>{{ r.chain }}</td><td>{{ r.rule_type }}</td><td>{{ r.protocol or "*" }}</td>
+        <td>{{ r.source_ip or "any" }}{% if r.source_port %}:{{ r.source_port }}{% endif %}</td>
+        <td>{{ r.destination_ip or "any" }}{% if r.destination_port %}:{{ r.destination_port }}{% endif %}</td>
+        <td>{{ r.source_port or "*" }} -> {{ r.destination_port or "*" }}</td>
+        <td>{% if r.forwarded_ip %}{{ r.forwarded_ip }}{% if r.forwarded_port %}:{{ r.forwarded_port }}{% endif %}{% else %}-{% endif %}</td>
+        <td>{{ r.packets }}</td><td>{{ r.bytes }}</td>
+        <td>{{ "%.1f"|format(r.bytes_per_second) }} B/s</td>
+        <td class="mono raw">{{ r.raw }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="13" class="muted">No rules detected in this section.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

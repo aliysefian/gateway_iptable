@@ -1,0 +1,29 @@
+[Unit]
+Description=Local iptables forwarding dashboard
+Documentation=file:/opt/iptfw/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/iptfw
+Environment=IPTFW_BIND_HOST=127.0.0.1
+Environment=IPTFW_BIND_PORT=8088
+Environment=IPTFW_DATA_DIR=/var/lib/iptfw
+Environment=IPTFW_LOG_LEVEL=INFO
+EnvironmentFile=-/etc/iptfw/iptfw.env
+ExecStart=/opt/iptfw/.venv/bin/python -m iptfw
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/iptfw
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target
